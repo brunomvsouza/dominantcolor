@@ -45,7 +45,6 @@
 package dominantcolor
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"math/rand"
@@ -54,19 +53,18 @@ import (
 	"github.com/nfnt/resize"
 )
 
-const (
-	resizeTo      = 256
-	nCluster      = 4
-	maxSample     = 10
-	nIterations   = 50
-	maxBrightness = 665
-	minDarkness   = 100
-)
+type DominantColor struct {
+	SampleImageSize            uint
+	NumberOfClusters           int
+	UniqueColorSearchRetries   int
+	ConvergenceIterations      int
+	MaximumBrightnessThreshold uint16
+	MaximumDarknessThreshold   uint16
+}
 
-// Find returns the dominant color in img.
-func Find(img image.Image) color.RGBA {
+func (d *DominantColor) FromImage(img image.Image) color.RGBA {
 	// Shrink image for faster processing.
-	img = resize.Thumbnail(resizeTo, resizeTo, img, resize.NearestNeighbor)
+	img = resize.Thumbnail(d.SampleImageSize, d.SampleImageSize, img, resize.NearestNeighbor)
 
 	bounds := img.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
@@ -77,12 +75,12 @@ func Find(img image.Image) color.RGBA {
 		return
 	}
 	// Pick a starting point for each cluster.
-	clusters := make(kMeanClusterGroup, 0, nCluster)
-	for i := 0; i < nCluster; i++ {
+	clusters := make(kMeanClusterGroup, 0, d.NumberOfClusters)
+	for i := 0; i < d.NumberOfClusters; i++ {
 		// Try up to 10 times to find a unique color. If no unique color can be
 		// found, destroy this cluster.
 		colorUnique := false
-		for j := 0; j < maxSample; j++ {
+		for j := 0; j < d.UniqueColorSearchRetries; j++ {
 			ri, gi, bi, a := img.At(randomPoint()).RGBA()
 			// Ignore transparent pixels.
 			if a == 0 {
@@ -105,7 +103,7 @@ func Find(img image.Image) color.RGBA {
 		}
 	}
 	convergence := false
-	for i := 0; i < nIterations && !convergence && len(clusters) != 0; i++ {
+	for i := 0; i < d.ConvergenceIterations && !convergence && len(clusters) != 0; i++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 				ri, gi, bi, a := img.At(x, y).RGBA()
@@ -135,9 +133,9 @@ func Find(img image.Image) color.RGBA {
 	for i, c := range clusters {
 		r, g, b := c.Centroid()
 		// Sum the RGB components to determine if the color is too bright or too dark.
-		var summedColor uint16 = uint16(r) + uint16(g) + uint16(b)
+		summedColor := uint16(r) + uint16(g) + uint16(b)
 
-		if summedColor < maxBrightness && summedColor > minDarkness {
+		if summedColor < d.MaximumBrightnessThreshold && summedColor > d.MaximumDarknessThreshold {
 			// If we found a valid color just set it and break. We don't want to
 			// check the other ones.
 			col.R = r
@@ -157,7 +155,30 @@ func Find(img image.Image) color.RGBA {
 	return col
 }
 
-// Hex returns a string representing the color in "#AABBCC" format.
-func Hex(c color.RGBA) string {
-	return "#" + fmt.Sprintf("%.2X%.2X%.2X", c.R, c.G, c.B)
+// NewDefault creates a new instance of DominantColor with
+// default settings
+func NewDefault() *DominantColor {
+	return &DominantColor{
+		SampleImageSize:            256,
+		NumberOfClusters:           4,
+		UniqueColorSearchRetries:   10,
+		ConvergenceIterations:      50,
+		MaximumBrightnessThreshold: 665,
+		MaximumDarknessThreshold:   100,
+	}
+}
+
+// New creates a new instance of DominantColor
+func New(sampleImageSize uint, numberOfClusters, uniqueColorSearchRetries,
+	convergenceIterations int, maximumBrightnessThreshold,
+	maximumDarknessThreshold uint16) *DominantColor {
+
+	return &DominantColor{
+		SampleImageSize:            sampleImageSize,
+		NumberOfClusters:           numberOfClusters,
+		UniqueColorSearchRetries:   uniqueColorSearchRetries,
+		ConvergenceIterations:      convergenceIterations,
+		MaximumBrightnessThreshold: maximumBrightnessThreshold,
+		MaximumDarknessThreshold:   maximumDarknessThreshold,
+	}
 }
